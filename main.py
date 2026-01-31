@@ -10,3 +10,10 @@ from sklearn.metrics import mean_absolute_error, r2_score
 df = pd.read_csv("melb_data.csv")
 df = df.drop(["Address", "Rooms", "SellerG", "Postcode", "CouncilArea", "Bedroom2"], axis=1)
 df.to_csv("melb_data_dropped.csv", index=False)
+#creating a dict of all suburbs for later viewing
+subDic = {
+    suburb: i
+        for i, suburb in enumerate(df['Suburb'].unique())
+    }
+df['Suburb'] = df['Suburb'].map(subDic)
+print (df)
