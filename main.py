@@ -16,4 +16,6 @@ subDic = {
         for i, suburb in enumerate(df['Suburb'].unique())
     }
 df['Suburb'] = df['Suburb'].map(subDic)
-print (df)
+
+
+print (df["YearBuilt"].isna().sum())
