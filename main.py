@@ -1,22 +1,17 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler, labelEncoder
+from sklearn.model_selection import train_test_split, cross_val_score
 
 # Cleaning Data
 df = pd.read_csv("melb_data.csv")
 df = df.drop(["Address", "SellerG", "Postcode", "CouncilArea", "Bedroom2"], axis=1)
 df.to_csv("melb_data_dropped.csv", index=False)
-#creating a dict of all suburbs for later viewing
-subDic = {
-    suburb: i
-        for i, suburb in enumerate(df['Suburb'].unique())
-    }
-df['Suburb'] = df['Suburb'].map(subDic)
+
 df['Landsize'] = df['Landsize'].replace(0, np.nan)
 df['BuildingArea'] = df['BuildingArea'].replace(0, np.nan)
 
@@ -53,7 +48,6 @@ df['Landsize'] = df['Landsize'].fillna(
 df['Landsize'] = df['Landsize'].fillna(df['Landsize'].median())
 
 #generate building area ratio for building area imputation with fallback with known values 
-
 known_values = df[
     df['BuildingArea'].notna() & df['Landsize'].notna()
 ]
@@ -89,10 +83,21 @@ df['BuildingArea'] = df.apply(
     fill_building_area,
     axis=1
 )
+#Split data into training and testing sets
 
-cat_cols = df.select_dtypes(include=['object']).columns
-#Scale numerical columns
-num_cols = df.select_dtypes(include=['int64', 'float64']).columns
+x = df.drop('Price', axis=1)
+y = df['Price']
+
+x_train, x_test, y_train, y_test = train_test_split(
+    x, y, test_size=0.2, random_state=42
+)
+
+cat_cols = x.select_dtypes(include=['object']).columns
+num_cols = x.select_dtypes(include=['int64', 'float64']).columns
+
+#Linear Regression 
+
+
 
 print(df[cat_cols].isna().sum())
 print(df[['Landsize', 'BuildingArea']].isna().sum())
