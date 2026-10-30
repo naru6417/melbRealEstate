@@ -1,11 +1,15 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+import numpy as np
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.preprocessing import StandardScaler, labelEncoder
+from sklearn.preprocessing import StandardScaler,  OneHotEncoder
 from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn import pipeline    
+from sklearn.compose import ColumnTransformer
+
 
 # Cleaning Data
 df = pd.read_csv("melb_data.csv")
@@ -96,8 +100,50 @@ cat_cols = x.select_dtypes(include=['object']).columns
 num_cols = x.select_dtypes(include=['int64', 'float64']).columns
 
 #Linear Regression 
+linearPre = ColumnTransformer(
+    transformers=[
+        (
+            'num',
+            StandardScaler(),
+            num_cols
+        ),
+        (
+            'cat',
+            OneHotEncoder(handle_unknown='ignore'),
+            cat_cols
+            
+        )
+    ]  
+)
 
+LinearReg = pipeline(
+    steps = [
+        ('preprocessor', linearPre),
+        ('model', LinearRegression())
+])
 
+#Random Forest
+forestPre = ColumnTransformer(
+    transformers = [
+        (
+            'nums',
+            'passthrough',
+            num_cols
+        )
+        (
+            'cat',
+            OneHotEncoder(handle_unknown= 'ignore'),
+            cat_cols
+        )
+    ]
+)
+RandomForest = pipeline(
+    steps = [
+        ('preprocessor', forestPre)
+        ('model', RandomForestRegressor())
+    ]
+)
+LinearReg.fit(x_train, y_train)
 
 print(df[cat_cols].isna().sum())
 print(df[['Landsize', 'BuildingArea']].isna().sum())
