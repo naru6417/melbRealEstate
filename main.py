@@ -19,82 +19,85 @@ df.to_csv("melb_data_dropped.csv", index=False)
 df['Landsize'] = df['Landsize'].replace(0, np.nan)
 df['BuildingArea'] = df['BuildingArea'].replace(0, np.nan)
 
-#Year built imputation with fallback abd binning to the nearest half decade
-df['YearBuilt'] = df['YearBuilt'].fillna(
-    df.groupby('Suburb')['YearBuilt'].transform('median')
-)
-df['YearBuilt'] = df['YearBuilt'].fillna(df['YearBuilt'].median())
-
-df['YearBuilt'] = (df['YearBuilt'] // 5) * 5
-
-#car imputation with fallback
-df['Car'] = df['Car'].fillna(
-    df.groupby(['Suburb', 'YearBuilt', 'Type'])['Car'].transform('median')
-)
-df['Car'] = df['Car'].fillna(
-    df.groupby(['Suburb', 'Type'])['Car'].transform('median')
-)
-df['Car'] = df['Car'].fillna(
-    df.groupby(['Suburb'])['Car'].transform('median')
-)
-df['Car'] = df['Car'].fillna(df['Car'].median())
-
-#land size imputation with fallback
-df['Landsize'] = df['Landsize'].fillna(
-    df.groupby(['Suburb', 'YearBuilt', 'Type'])['Landsize'].transform('median')
-)
-df['Landsize'] = df['Landsize'].fillna(
-    df.groupby(['Suburb', 'Type'])['Landsize'].transform('median')
-)
-df['Landsize'] = df['Landsize'].fillna(
-    df.groupby(['Suburb'])['Landsize'].transform('median')
-)
-df['Landsize'] = df['Landsize'].fillna(df['Landsize'].median())
-
-#generate building area ratio for building area imputation with fallback with known values 
-known_values = df[
-    df['BuildingArea'].notna() & df['Landsize'].notna()
-]
-buildingAreaRatio1 = known_values.groupby(['Suburb', 'YearBuilt', 'Type']).apply(
-    lambda x: 
-        (x['BuildingArea'] / x['Landsize']).median()
-)
-buildingAreaRatio2 = known_values.groupby(['Suburb', 'Type']).apply(
-    lambda x: 
-        (x['BuildingArea'] / x['Landsize']).median()
-)
-BuildingAreaRatio3 = known_values.groupby(['Suburb']).apply(
-    lambda x: 
-        (x['BuildingArea'] / x['Landsize']).median()
-)
-globalRatio = (df['BuildingArea'] / df['Landsize']).median()
-#fill missing values for buildingArea using the ratios calculated above
-def fill_building_area(row):
-    if pd.isnull(row['BuildingArea']):
-        ratio = buildingAreaRatio1.get((row['Suburb'], row['YearBuilt'], row['Type']), np.nan)
-        if pd.isnull(ratio):
-            ratio = buildingAreaRatio2.get((row['Suburb'], row['Type']), np.nan)
-
-        if pd.isnull(ratio):
-            ratio = BuildingAreaRatio3.get(row['Suburb'], np.nan)
-        if pd.isnull(ratio):
-            ratio = globalRatio
-        return row['Landsize'] * ratio 
-    else:
-        return row['BuildingArea']
-    
-df['BuildingArea'] = df.apply(
-    fill_building_area,
-    axis=1
-)
 #Split data into training and testing sets
 
 x = df.drop('Price', axis=1)
 y = df['Price']
 
 x_train, x_test, y_train, y_test = train_test_split(
-    x, y, test_size=0.2, random_state=42
+    x, y, test_size=0.2, random_state=42, stratify=y
 )
+
+#Year built imputation logic with fallback
+yearbuilt_suburb_median = x_train.groupby('Suburb')['YearBuilt'].median()
+yearbuilt_global_median = x_train['YearBuilt'].median()
+    
+
+#car imputation logic with fallback
+car_suburb_yearbuilt_type_median = x_train.groupby(['Suburb', 'YearBuilt', 'Type'])['Car'].median()
+car_suburb_type_median = x_train.groupby(['Suburb', 'Type'])['Car'].median()
+car_suburb_median = x_train.groupby(['Suburb'])['Car'].median()
+car_global_median = x_train['Car'].median()
+
+
+#land size imputation logic with fallback
+landsize_suburb_yearbuilt_type_median = x_train.groupby(['Suburb', 'YearBuilt', 'Type'])['Landsize'].median()
+landsize_suburb_type_median = x_train.groupby(['Suburb', 'Type'])['Landsize'].median()
+landsize_suburb_median = x_train.groupby(['Suburb'])['Landsize'].median()
+landsize_global_median = x_train['Landsize'].median()
+
+
+#generate building area ratio for building area imputation with fallback with known values 
+known_values = x_train[
+    x_train['BuildingArea'].notna() & x_train['Landsize'].notna () & (x_train['Landsize'] > 0)
+].copy()
+
+known_values['BuildingAreaRatio'] = known_values['BuildingArea'] / known_values['Landsize']
+
+ratio_suburb_yearbuilt_type = known_values.groupby(['Suburb', 'YearBuilt', 'Type'])['BuildingAreaRatio'].median()
+ratio_suburb_type = known_values.groupby(['Suburb', 'Type'])['BuildingAreaRatio'].median()
+ratio_suburb = known_values.groupby(['Suburb'])['BuildingAreaRatio'].median()
+global_ratio = known_values['BuildingAreaRatio'].median()
+
+def impute_data( 
+    data, 
+    yearbuilt_suburb_median, 
+    yearbuilt_global_median, 
+    car_suburb_yearbuilt_type_median, 
+    car_suburb_type_median, 
+    car_suburb_median, 
+    car_global_median, 
+    landsize_suburb_yearbuilt_type_median, 
+    landsize_suburb_type_median, 
+    landsize_suburb_median, 
+    landsize_global_median,
+    ratio_suburb_yearbuilt_type,
+    ratio_suburb_type,
+    ratio_suburb,
+    global_ratio
+):
+    data = data.copy()
+    #Fill missing values for YearBuilt
+    data['YearBuilt'] = data['YearBuilt'].fillna(data['Suburb'].map(yearbuilt_suburb_median))
+    data['YearBuilt'] = data['YearBuilt'].fillna(yearbuilt_global_median)
+    data['YearBuilt'] = (data['YearBuilt'] // 5) * 5
+    #Fill missing values for Car
+    data['Car'] = data['Car'].fillna(data.set_index(['Suburb', 'YearBuilt', 'Type']).index.map(car_suburb_yearbuilt_type_median))
+    data['Car'] = data['Car'].fillna(data.set_index(['Suburb', 'Type']).index.map(car_suburb_type_median))
+    data['Car'] = data['Car'].fillna(data['Suburb'].map(car_suburb_median))
+    data['Car'] = data['Car'].fillna(car_global_median)
+    #Fill missing values for Landsize
+    data['Landsize'] = data['Landsize'].fillna(data.set_index(['Suburb', 'YearBuilt', 'Type']).index.map(landsize_suburb_yearbuilt_type_median))
+    data['Landsize'] = data['Landsize'].fillna(data.set_index(['Suburb', 'Type']).index.map(landsize_suburb_type_median))
+    data['Landsize'] = data['Landsize'].fillna(data['Suburb'].map(landsize_suburb_median))
+    data['Landsize'] = data['Landsize'].fillna(landsize_global_median)
+    #Fill missing values for BuildingArea
+    data['BuildingArea'] = data['BuildingArea'].fillna(data.set_index(['Suburb', 'YearBuilt', 'Type']).index.map(ratio_suburb_yearbuilt_type * data['Landsize']))
+    data['BuildingArea'] = data['BuildingArea'].fillna(data.set_index(['Suburb', 'Type']).index.map(ratio_suburb_type * data['Landsize']))
+    data['BuildingArea'] = data['BuildingArea'].fillna(data['Suburb'].map(ratio_suburb * data['Landsize']))
+    data['BuildingArea'] = data['BuildingArea'].fillna(global_ratio * data['Landsize'])
+
+    return data
 
 cat_cols = x.select_dtypes(include=['object']).columns
 num_cols = x.select_dtypes(include=['int64', 'float64']).columns
